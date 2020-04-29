@@ -1,0 +1,117 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+# devtools::install_github("DavisVaughan/almanac")
+# devtools::install_github("DavisVaughan/slide")
+
+library(almanac)
+library(slide)
+library(dplyr)
+library(lubridate)
+```
+
+
+```{r}
+index <- as.Date("2019-08-29") + c(0, 1, 5, 6, 7)
+sales <- rnorm(length(index), mean = 10000, sd = 1000)
+
+company <- tibble(sales = sales, index = index)
+
+# Look back 2 "rows"
+company <- company %>%
+  mutate(
+    roll_by_row = slide_dbl(sales, mean, .before = 2)
+  )
+
+company
+
+# You might be used to `partial = FALSE` being the default from rollapply()
+company %>%
+  mutate(
+    roll_by_row = slide_dbl(sales, mean, .before = 2, .complete = TRUE)
+  )
+
+# Look back 2 days
+company <- company %>%
+  mutate(
+    roll_by_day = slide_index_dbl(sales, index, mean, .before = days(2))
+  )
+
+company
+
+company %>%
+  mutate(
+    wday = wday(index, TRUE)
+  )
+
+# ------------------------------------------------------------------------------
+
+# Recurrence rule:
+# - Define how to "recur"
+# - Start with a frequency: daily, weekly, monthly, yearly...
+# - Add extra rules: On 5th day of the month, on weekends, ...
+
+since <- min(company$index)
+
+rrule <- weekly(since = since) %>%
+  recur_on_weekends()
+
+# You can interrogate a recurrence rule to get "event" dates from it
+
+weekends <- sch_seq(from = since, to = since + 30, rrule)
+wday(weekends, label = TRUE)
+
+# More importantly, you can use these to "adjust" dates as you move forward
+
+company
+
+friday <- company$index[2]
+friday
+
+sch_step(x = friday, n = 1, schedule = rrule)
+
+# ------------------------------------------------------------------------------
+
+starts <- sch_step(x = company$index, n = -2, schedule = rrule)
+stops <- company$index
+
+company %>% mutate(
+  roll_by_bday = slide_between_dbl(sales, index, .starts = starts, .stops = stops, mean)
+)
+
+# ------------------------------------------------------------------------------
+
+on_first_friday <- 
+  monthly() %>%
+  recur_on_wday("Friday", nth = 1)
+
+first_friday_old_way  <- 
+  sch_seq("2017-01-01", "2020-01-01", on_first_friday) %>% 
+  enframe( name = "month") %>% 
+  mutate(month = month(value)) %>% 
+  filter(month %in% c(1, 4, 7, 10))
+
+on_quarterly <- monthly() %>%
+  recur_on_interval(3) %>%
+  recur_on_wday("Friday", nth = 1)
+
+first_friday_new_way  <- 
+  sch_seq("2017-01-01", "2020-01-01",  on_quarterly) %>% 
+  enframe()
+library(tidyverse)
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
